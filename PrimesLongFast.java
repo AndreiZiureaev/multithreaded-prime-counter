@@ -2,6 +2,20 @@ import java.lang.Math;
 
 public class PrimesLongFast {
 
+	// The state passed to each thread
+	private class Config {
+        int iStart;
+        int iterations;
+        int iStep;
+        int maxNum;
+        int kStart;
+        boolean notPrime[];
+        int position;
+        int primes[];
+        int evenness;
+        int primeCount = 0;
+    }
+
 	private static final String ERROR_WRONG_FORMAT =
 	   "\nUsage: PrimesLongFast <integer>\nFinds primes up to <integer>.\n";
 
@@ -19,7 +33,7 @@ public class PrimesLongFast {
 	private int[] primes;
 	private boolean[] notPrime, notPrime2;
 
-	public static void main(String str[]) {
+	public static void main(String[] str) {
 
 		long time = System.currentTimeMillis();
 
@@ -65,8 +79,11 @@ public class PrimesLongFast {
 		int index = 2; // 2 is the first prime.
 		int index2;
 
-        // The first iteration only finds primes up to the square root of the
-        // maximum.
+        // The range of numbers is split into sections, or windows. Each
+		// window is maxNum numbers in size. The first iteration finds primes
+		// up to the square root of maxNum, marking their multiples as
+		// non-prime. The multiples then cover the non-primes of the whole
+		// window up to maxNum.
 		int sqrtL = (int)Math.sqrt(maxNum);
 
 		while (index <= sqrtL) {
@@ -123,8 +140,6 @@ public class PrimesLongFast {
 		primeCount = 0;
 		primeCount2 = 0;
 
-        // The arrays will be reused at each iteration, so they don't have to
-        // be long.
 		notPrime = new boolean[maxNum + 1];
 		notPrime[0] = true; // All elements are initially false. This makes 2
 		notPrime[1] = true; // the first prime.
@@ -155,43 +170,20 @@ public class PrimesLongFast {
 	}
 
 	private void extend() {
+		Config cfg = new Config();
+		cfg.iStart = 2;
+		cfg.iterations = iterations2;
+		cfg.iStep = 2;
+		cfg.maxNum = maxNum2;
+		cfg.kStart = 1;
+		cfg.notPrime = notPrime2;
+		cfg.position = position2;
+		cfg.primes = primes;
+		cfg.evenness = 0;
 
 		Thread t = new Thread(() -> {
-
-			long start2;
-			int offset2;
-			int primesX2;
-
-			for (int i2 = 2; i2 < iterations2; i2 += 2) {
-
-				start2 = i2 * (long)maxNum2;
-
-				for (int k2 = 1; k2 <= maxNum2; k2 += 2) {
-					notPrime2[k2] = false;
-				}
-
-				for (int j2 = 1; j2 < position2; j2++) {
-
-					primesX2 = primes[j2] * 2;
-					offset2 = primes[j2]
-						- (int)(start2 % primes[j2]);
-
-					if (offset2 % 2 == 0) {
-						offset2 += primes[j2];
-					}
-
-					while (offset2 <= maxNum2) {
-						notPrime2[offset2] = true;
-						offset2 += primesX2;
-					}
-				}
-
-				for (int k2 = 1; k2 <= maxNum2; k2 += 2) {
-					if (notPrime2[k2] == false) {
-						primeCount2++;
-					}
-				}
-			}
+			iterate(cfg);
+			primeCount2 += cfg.primeCount;
 		});
 		t.start();
 
@@ -301,18 +293,5 @@ public class PrimesLongFast {
                 }
             }
         }
-    }
-
-    private class Config {
-        int iStart;
-        int iterations;
-        int iStep;
-        int maxNum;
-        int kStart;
-        boolean notPrime[];
-        int position;
-        int primes[];
-        int evenness;
-        int primeCount = 0;
     }
 }
