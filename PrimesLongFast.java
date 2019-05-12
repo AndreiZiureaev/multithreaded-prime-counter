@@ -31,6 +31,8 @@ public class PrimesLongFast {
     private long upperLimit;
     private int numThreads;
 
+    private long cachedResult = -1;
+
     private int maxValueInIteration;
     private int iterations;
     private int numBasePrimes;
@@ -79,6 +81,10 @@ public class PrimesLongFast {
      * @return The number of primes.
      */
     public long countPrimes() {
+        if (cachedResult >= 0) {
+            return cachedResult;
+        }
+
         if (upperLimit < 2) {
             return 0;
         }
@@ -92,7 +98,9 @@ public class PrimesLongFast {
             "; numBasePrimes = " + numBasePrimes + ";\n"
         );
 
-        return countOtherPrimes();
+        cachedResult = countOtherPrimes();
+
+        return cachedResult;
     }
 
     /**
