@@ -1,5 +1,3 @@
-import java.lang.Math;
-
 /**
  * Counts how many primes less than or equal to a long integer there are.
  * It uses multiple threads to count about half a billion primes per second
@@ -24,7 +22,7 @@ public class PrimesLongFast {
         int primeCount = 0;
     }
 
-    private static final boolean DEBUG = true;
+    private static final boolean DEBUG = false;
     private static final String USAGE =
        "\nUsage: PrimesLongFast <upper limit> [number of threads]\n" +
        "\tCounts the number of primes up to and including <upper limit>.\n" +
@@ -175,7 +173,7 @@ public class PrimesLongFast {
             try {
                 threads[i].join();
             } catch (InterruptedException e) {
-                System.out.println("Interrupted");
+                System.err.println("Interrupted");
             }
 
             // Extract the finished thread's primeCount and add it to the total.
