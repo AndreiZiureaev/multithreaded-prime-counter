@@ -2,296 +2,298 @@ import java.lang.Math;
 
 public class PrimesLongFast {
 
-	// The state passed to each thread
-	private class Config {
-        int iStart;
+    // The state passed to each thread
+    private class Config {
+        long upperLimit;
+        int startingIterationIndex;
         int iterations;
-        int iStep;
-        int maxNum;
-        int kStart;
+        int iterationStep;
+        int maxValueInIteration;
         boolean notPrime[];
-        int position;
-        int primes[];
-        int evenness;
+        int numBasePrimes;
+        int basePrimes[];
         int primeCount = 0;
     }
 
-	private static final String ERROR_WRONG_FORMAT =
-	   "\nUsage: PrimesLongFast <integer>\nFinds primes up to <integer>.\n";
+    private static final String USAGE =
+       "\nUsage: PrimesLongFast <upper limit> [number of threads]\n" +
+       "\tCounts the number of primes up to and including <upper limit>.\n" +
+       "\t[number of threads] defaults to 1 and should be bigger than 0.\n";
 
-	private long initial;
-    private long primeCount;
-    private long primeCount2;
+    private long upperLimit;
+    private int numThreads;
 
-	private int maxNum;
-    private int maxNum2;
-	private int position;
-    private int position2;
-	private int iterations;
-    private int iterations2;
+    private int maxValueInIteration;
+    private int iterations;
+    private int numBasePrimes;
+    private int[] basePrimes;
+    private boolean[] notPrime;
 
-	private int[] primes;
-	private boolean[] notPrime, notPrime2;
+    /**
+     * @param upperLimit Count primes up to and including this number.
+     * @param numThreads The number of threads to use. Should be bigger than 0.
+     */
+    public PrimesLongFast(long upperLimit, int numThreads) {
+        this.upperLimit = upperLimit;
 
-	public static void main(String[] str) {
+        if (upperLimit < 2) {
+            return;
+        }
 
-		long time = System.currentTimeMillis();
+        if (numThreads < 1) {
+            numThreads = 1;
+        }
 
-		if (str.length > 0) {
+        this.numThreads = numThreads;
 
-			long num = 0;
+        // The range of numbers is split into sections, each sqrt(upperLimit)
+        // in length. A single iteration counts primes in a single section.
+        maxValueInIteration = (int)Math.ceil(Math.sqrt(upperLimit));
 
-			try {
-				num = Long.parseLong(str[0]);
-			} catch (NumberFormatException e) {
-				System.err.println(ERROR_WRONG_FORMAT);
-				System.exit(1);
-			}
+        // How many iterations of size maxValueInIteration can fit into the
+        // range? Each iteration is independent from the others (except the
+        // first one) and primes in each iteration can be counted in their
+        // own thread.
+        iterations = (int)(upperLimit / maxValueInIteration);
 
-			PrimesLongFast primesLong = new PrimesLongFast(num);
-			System.out.println(
-				"There are " +
-                primesLong.findPrimes() +
-                " primes less than or equal to " +
-                num
-			);
+        notPrime = new boolean[maxValueInIteration + 1];
+        notPrime[0] = true; // All elements are initially false.
+        notPrime[1] = true;
 
-			System.out.println(
-				"\nTime: " +
-                ((float)(System.currentTimeMillis() - time) / 1000) +
-                " s\n\n"
-			);
-		} else {
-			System.out.println(ERROR_WRONG_FORMAT);
-		}
+        // All the primes of the first iteration will be stored here.
+        basePrimes = new int[findSize(maxValueInIteration)];
+        numBasePrimes = 0;
     }
 
-	PrimesLongFast(long num) {
-		initial = num;
-	}
+    /**
+     * Initiates the counting.
+     *
+     * @return The number of primes.
+     */
+    public long countPrimes() {
+        if (upperLimit < 2) {
+            return 0;
+        }
 
-	private long findPrimes() {
+        calculateBasePrimes();
 
-		if (!setup()) {
-			return 0;
-		}
+        System.out.println(
+            "Found the base primes. Now counting the rest...\n\n" +
+            "maxValueInIteration = " + maxValueInIteration +
+            "; iterations = " + iterations +
+            "; numBasePrimes = " + numBasePrimes + ";\n"
+        );
 
-		int index = 2; // 2 is the first prime.
-		int index2;
+        return countOtherPrimes();
+    }
 
-        // The range of numbers is split into sections, or windows. Each
-		// window is maxNum numbers in size. The first iteration finds primes
-		// up to the square root of maxNum, marking their multiples as
-		// non-prime. The multiples then cover the non-primes of the whole
-		// window up to maxNum.
-		int sqrtL = (int)Math.sqrt(maxNum);
+    /**
+     * Calculates the primes up to the square root of upperLimit and stores them
+     * in basePrimes.
+     */
+    private void calculateBasePrimes() {
+        int prime = 2; // 2 is the first prime.
+        int multiple;
 
-		while (index <= sqrtL) {
+        // Find primes up to the square root of
+        // maxValueInIteration, marking their multiples as non-prime. These
+        // multiples cover the non-primes of the whole iteration up to
+        // maxValueInIteration.
+        int upper = (int)Math.sqrt(maxValueInIteration);
 
-            // index is prime. All its multiples are not prime.
+        while (prime <= upper) {
+
+            // All the multiples of prime are not prime.
             // Mark them in notPrime[].
-			index2 = index * index;
-			while (index2 <= maxNum) {
-				notPrime[index2] = true;
-				index2 += index;
-			}
+            // Starting from prime^2 because all the non-primes less than that
+            // would have been marked already.
+            multiple = prime * prime;
 
-            // index becomes the next prime.
-			do {
-                index++;
-			} while (notPrime[index]); // All the non-primes known so far are
+            while (multiple <= maxValueInIteration) {
+                notPrime[multiple] = true;
+                multiple += prime;
+            }
+
+            // prime becomes the next prime.
+            do {
+                prime++;
+            } while (notPrime[prime]); // All the non-primes known so far are
                                        // marked true in notPrime[].
-		}
-
-        // Increase primeCount by the number of new primes found.
-		count();
-
-		System.out.println(
-			"Counting...\n\nmaxNum = " +
-            maxNum +
-            "; iterations = " +
-            iterations +
-            ";\n\n"
-		);
-
-        // Run multiple threads that use the primes found in the first iteration
-        // to find all the other primes.
-		extend();
-
-		return primeCount;
-	}
-
-	private boolean setup() {
-
-		if (initial < 2) {
-			return false;
-		}
-
-        // The maximum for the first iteration.
-		maxNum = (int)Math.ceil(Math.sqrt(initial));
-		maxNum2 = maxNum;
-
-        // How many windows of size maxNum can fit into the range?
-        // Each window is independent from the others and primes in each window
-        // can be found in their own thread.
-		iterations = (int)(initial / maxNum);
-		iterations2 = iterations;
-
-		primeCount = 0;
-		primeCount2 = 0;
-
-		notPrime = new boolean[maxNum + 1];
-		notPrime[0] = true; // All elements are initially false. This makes 2
-		notPrime[1] = true; // the first prime.
-		notPrime2 = new boolean[maxNum + 1];
-
-        // All the primes of an iteration will be stored here.
-		primes = new int[findSize()];
-		position = 0;
-
-		return true;
-	}
-
-    // Returns the upper limit to the number of primes in each iteration.
-	private int findSize() {
-		return (int)((maxNum / Math.log(maxNum)) *
-            (1 + 1.2762 / Math.log(maxNum))) + 1;
-	}
-
-	private void count() {
-		for (int i = 2; i <= maxNum; i++) {
-			if (notPrime[i] == false) {
-				primeCount++;
-				primes[position] = i;
-				position++;
-			}
-		}
-		position2 = position;
-	}
-
-	private void extend() {
-		Config cfg = new Config();
-		cfg.iStart = 2;
-		cfg.iterations = iterations2;
-		cfg.iStep = 2;
-		cfg.maxNum = maxNum2;
-		cfg.kStart = 1;
-		cfg.notPrime = notPrime2;
-		cfg.position = position2;
-		cfg.primes = primes;
-		cfg.evenness = 0;
-
-		Thread t = new Thread(() -> {
-			iterate(cfg);
-			primeCount2 += cfg.primeCount;
-		});
-		t.start();
-
-        Config[] cfgs = new Config[2];
-
-        for (int i = 0; i < 2; i++) {
-            cfgs[i] = new Config();
-            cfgs[i].iStart = 1;
-            cfgs[i].iterations = iterations;
-            cfgs[i].iStep = 2;
-            cfgs[i].maxNum = maxNum;
-            cfgs[i].kStart = i + 1;
-            cfgs[i].notPrime = notPrime;
-            cfgs[i].position = position;
-            cfgs[i].primes = primes;
-            cfgs[i].evenness = i;
         }
 
-		if (maxNum % 2 == 0) {
-            iterate(cfgs[0]);
-		} else {
-            iterate(cfgs[1]);
-		}
-
-        primeCount += cfgs[0].primeCount + cfgs[1].primeCount;
-
-        long start;
-        int offset;
-
-		// final iteration
-		start = (long)iterations * maxNum;
-
-		if (start < initial) {
-
-			maxNum = (int)(initial - start);
-
-			System.out.println(
-				"Performing final iteration...\n\n" +
-                "start = " +
-                start +
-                "; maxNum = " +
-                maxNum +
-                ";\n\n"
-			);
-
-			for (int k = 1; k <= maxNum; k++) {
-				notPrime[k] = false;
-			}
-
-			for (int j = 0; j < position; j++) { // primes
-
-				offset = primes[j] - (int)(start % primes[j]);
-
-				while (offset <= maxNum) {
-					notPrime[offset] = true;
-					offset += primes[j];
-				}
-			}
-
-			for (int k = 1; k <= maxNum; k++) { // count
-				if (notPrime[k] == false) {
-					primeCount++;
-				}
-			}
-		}
-
-		try {
-			t.join();
-		} catch (InterruptedException e) {
-			System.out.println("Interrupted");
-		}
-
-		primeCount += primeCount2;
-	}
-
-    private static void iterate(Config cfg) {
-        long start;
-        int offset;
-        int primesX;
-
-        for (int i = cfg.iStart; i < cfg.iterations; i += cfg.iStep) {
-
-            start = i * (long)cfg.maxNum;
-
-            for (int k = cfg.kStart; k <= cfg.maxNum; k += 2) {
-                cfg.notPrime[k] = false;
-            }
-
-            for (int j = 1; j < cfg.position; j++) { // primes
-
-                primesX = cfg.primes[j] * 2;
-                offset = cfg.primes[j] - (int)(start % cfg.primes[j]);
-
-                if (offset % 2 == cfg.evenness) {
-                    offset += cfg.primes[j];
-                }
-
-                while (offset <= cfg.maxNum) {
-                    cfg.notPrime[offset] = true;
-                    offset += primesX;
-                }
-            }
-
-            for (int k = cfg.kStart; k <= cfg.maxNum; k += 2) { // count
-                if (cfg.notPrime[k] == false) {
-                    cfg.primeCount++;
-                }
+        // Fill in basePrimes[].
+        for (int i = 2; i <= maxValueInIteration; i++) {
+            if (notPrime[i] == false) {
+                basePrimes[numBasePrimes++] = i;
             }
         }
+    }
+
+    /**
+     * Run multiple threads that use the base primes to count all the other
+     * primes.
+     *
+     * @return The total number of primes.
+     */
+    private long countOtherPrimes() {
+        long primeCount = numBasePrimes;
+        Thread[] threads = new Thread[numThreads];
+        Config[] configs = new Config[numThreads];
+
+        for (int i = 0; i < numThreads; i++) {
+            configs[i] = new Config();
+            configs[i].upperLimit = upperLimit;
+            configs[i].startingIterationIndex = i + 1;
+            configs[i].iterations = iterations;
+            configs[i].iterationStep = numThreads;
+            configs[i].maxValueInIteration = maxValueInIteration;
+            configs[i].notPrime = new boolean[maxValueInIteration + 1];
+            configs[i].numBasePrimes = numBasePrimes;
+            configs[i].basePrimes = basePrimes;
+
+            // Arrow functions can only access final, or effectively final
+            // variables.
+            Config c = configs[i];
+
+            threads[i] = new Thread(() -> {
+                iterate(c);
+            });
+            threads[i].start();
+        }
+
+        for (int i = 0; i < numThreads; i++) {
+            try {
+                threads[i].join();
+            } catch (InterruptedException e) {
+                System.out.println("Interrupted");
+            }
+
+            // Extract the finished thread's primeCount and add it to the total.
+            primeCount += configs[i].primeCount;
+        }
+
+        return primeCount;
+    }
+
+    private static void iterate(Config c) {
+        int i;
+
+        for (i = c.startingIterationIndex; i < c.iterations; i += c.iterationStep) {
+            performIteration(c, i);
+        }
+
+        // Final iteration (if it's needed) is shorter than the rest.
+        if (i == c.iterations) {
+            long start = i * (long)c.maxValueInIteration;
+            int newMaxValueInIteration = (int)(c.upperLimit - start);
+            c.maxValueInIteration = newMaxValueInIteration;
+            performIteration(c, i);
+        }
+    }
+
+    private static void performIteration(Config c, int i) {
+
+        // start + 1 = the lowest possible prime in this iteration
+        long start = i * (long)c.maxValueInIteration;
+
+        // start + startMod2 = an even number
+        int startMod2 = (int)(start % 2);
+
+        // Ignore half the values because they are even.
+        // Set the rest to false because they could be primes.
+        // If start is even, the first possible prime is start + 1.
+        // If start is odd, the first possible prime after start is
+        // start + 2.
+        for (int k = startMod2 + 1; k <= c.maxValueInIteration; k += 2) {
+            c.notPrime[k] = false;
+        }
+
+        // Iterate over the primes found beforehand. Start at 1 because
+        // the first prime is 2, which is already dealt with.
+        for (int j = 1; j < c.numBasePrimes; j++) {
+
+            int primeX2 = c.basePrimes[j] * 2;
+
+            // start + offset = m
+            // where m is the first multiple of basePrimes[j]
+            // bigger than start.
+            // 1 <= offset <= basePrimes[j]
+            int offset = c.basePrimes[j] - (int)(start % c.basePrimes[j]);
+
+            // No need to consider even multiples. Set up the offset
+            // so that it falls on an odd multiple.
+            // If start is even, then offset has to be odd and vice versa.
+            if (offset % 2 == startMod2) {
+                offset += c.basePrimes[j];
+            }
+
+            // offset goes through all the odd multiples of the prime
+            while (offset <= c.maxValueInIteration) {
+                c.notPrime[offset] = true;
+                offset += primeX2;
+            }
+        }
+
+        // Add the primes in this iteration to the count
+        for (int k = startMod2 + 1; k <= c.maxValueInIteration; k += 2) {
+            if (c.notPrime[k] == false) {
+                c.primeCount++;
+            }
+        }
+    }
+
+    /**
+     * See https://primes.utm.edu/howmany.html
+     *
+     * @param maxValueInIteration The biggest value in the first iteration.
+     * @return The upper limit to the number of primes in the first iteration.
+     */
+    private static int findSize(int maxValueInIteration) {
+        return (int)((maxValueInIteration / Math.log(maxValueInIteration)) *
+            (1 + 1.2762 / Math.log(maxValueInIteration))) + 1;
+    }
+
+    public static void main(String[] args) {
+        long time = System.currentTimeMillis();
+
+        if (args.length < 1 || args.length > 2) {
+            System.out.println(USAGE);
+            return;
+        }
+
+        long upperLimit;
+        try {
+            upperLimit = Long.parseLong(args[0]);
+        } catch (NumberFormatException e) {
+            System.out.println(USAGE);
+            return;
+        }
+
+        int numThreads = 1;
+        if (args.length > 1) {
+            try {
+                numThreads = Integer.parseInt(args[1]);
+            } catch (NumberFormatException e) {
+                System.out.println(USAGE);
+                return;
+            }
+
+            if (numThreads < 1) {
+                System.out.println(USAGE);
+                return;
+            }
+        }
+
+        PrimesLongFast p = new PrimesLongFast(upperLimit, numThreads);
+
+        System.out.println(
+            "There are " + p.countPrimes() + " primes less than or equal to " +
+            upperLimit
+        );
+
+        System.out.println(
+            "\nTime: " + ((float)(System.currentTimeMillis() - time) / 1000) +
+            " s"
+        );
     }
 }
