@@ -312,10 +312,14 @@ public class PrimesLongFast {
         }
 
         PrimesLongFast p = new PrimesLongFast(upperLimit, numThreads);
+        long count = p.countPrimes();
 
         System.out.println(
-            "There are " + p.countPrimes() + " primes less than or equal to " +
-            upperLimit
+            (
+                count == 1 ?
+                "There is 1 prime less than or equal to " :
+                "There are " + count + " primes less than or equal to "
+            ) + upperLimit
         );
 
         System.out.println(
