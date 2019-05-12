@@ -1,8 +1,17 @@
 import java.lang.Math;
 
+/**
+ * Counts how many primes less than or equal to a long integer there are.
+ * It uses multiple threads to count about half a billion primes per second
+ * on a multicore system.
+ *
+ * @author Andrei Ziureaev
+ */
 public class PrimesLongFast {
 
-    // The state passed to each thread
+    /**
+     * The state passed to each thread.
+     */
     private class Config {
         long upperLimit;
         int startingIterationIndex;
@@ -15,10 +24,11 @@ public class PrimesLongFast {
         int primeCount = 0;
     }
 
+    private static final boolean DEBUG = true;
     private static final String USAGE =
        "\nUsage: PrimesLongFast <upper limit> [number of threads]\n" +
        "\tCounts the number of primes up to and including <upper limit>.\n" +
-       "\t[number of threads] defaults to 1 and should be bigger than 0.\n";
+       "\t[number of threads] defaults to 1 and should be bigger than 0.";
 
     private long upperLimit;
     private int numThreads;
@@ -48,13 +58,13 @@ public class PrimesLongFast {
 
         // The range of numbers is split into sections, each sqrt(upperLimit)
         // in length. A single iteration counts primes in a single section.
-        maxValueInIteration = (int)Math.ceil(Math.sqrt(upperLimit));
+        maxValueInIteration = (int) Math.ceil(Math.sqrt(upperLimit));
 
         // How many iterations of size maxValueInIteration can fit into the
         // range? Each iteration is independent from the others (except the
         // first one) and primes in each iteration can be counted in their
         // own thread.
-        iterations = (int)(upperLimit / maxValueInIteration);
+        iterations = (int) (upperLimit / maxValueInIteration);
 
         notPrime = new boolean[maxValueInIteration + 1];
         notPrime[0] = true; // All elements are initially false.
@@ -77,7 +87,7 @@ public class PrimesLongFast {
 
         calculateBasePrimes();
 
-        System.out.println(
+        if (DEBUG) System.out.println(
             "Found the base primes. Now counting the rest...\n\n" +
             "maxValueInIteration = " + maxValueInIteration +
             "; iterations = " + iterations +
@@ -99,7 +109,7 @@ public class PrimesLongFast {
         // maxValueInIteration, marking their multiples as non-prime. These
         // multiples cover the non-primes of the whole iteration up to
         // maxValueInIteration.
-        int upper = (int)Math.sqrt(maxValueInIteration);
+        int upper = (int) Math.sqrt(maxValueInIteration);
 
         while (prime <= upper) {
 
@@ -175,29 +185,46 @@ public class PrimesLongFast {
         return primeCount;
     }
 
+    /**
+     * Counts the primes according to the parameters in c and stores the count
+     * in c.primeCount.
+     *
+     * @param c The state required to count the primes.
+     */
     private static void iterate(Config c) {
         int i;
 
         for (i = c.startingIterationIndex; i < c.iterations; i += c.iterationStep) {
-            performIteration(c, i);
+            performIteration(c, i * (long) c.maxValueInIteration);
         }
 
         // Final iteration (if it's needed) is shorter than the rest.
-        if (i == c.iterations) {
-            long start = i * (long)c.maxValueInIteration;
-            int newMaxValueInIteration = (int)(c.upperLimit - start);
+        long start = i * (long) c.maxValueInIteration;
+
+        if (start < c.upperLimit) {
+            int newMaxValueInIteration = (int) (c.upperLimit - start);
             c.maxValueInIteration = newMaxValueInIteration;
-            performIteration(c, i);
+
+            if (DEBUG) System.out.println(
+                "Final iteration...\n\n" +
+                "newMaxValueInIteration = " + newMaxValueInIteration +
+                "; i = " + i + "; start = " + start + ";\n"
+            );
+
+            performIteration(c, start);
         }
     }
 
-    private static void performIteration(Config c, int i) {
-
-        // start + 1 = the lowest possible prime in this iteration
-        long start = i * (long)c.maxValueInIteration;
+    /**
+     * Counts the primes in this iteration and stores the count in c.primeCount.
+     *
+     * @param c     The state required to count the primes in this iteration.
+     * @param start The lowest possible prime in this iteration is start + 1.
+     */
+    private static void performIteration(Config c, long start) {
 
         // start + startMod2 = an even number
-        int startMod2 = (int)(start % 2);
+        int startMod2 = (int) (start % 2);
 
         // Ignore half the values because they are even.
         // Set the rest to false because they could be primes.
@@ -218,7 +245,7 @@ public class PrimesLongFast {
             // where m is the first multiple of basePrimes[j]
             // bigger than start.
             // 1 <= offset <= basePrimes[j]
-            int offset = c.basePrimes[j] - (int)(start % c.basePrimes[j]);
+            int offset = c.basePrimes[j] - (int) (start % c.basePrimes[j]);
 
             // No need to consider even multiples. Set up the offset
             // so that it falls on an odd multiple.
@@ -249,8 +276,10 @@ public class PrimesLongFast {
      * @return The upper limit to the number of primes in the first iteration.
      */
     private static int findSize(int maxValueInIteration) {
-        return (int)((maxValueInIteration / Math.log(maxValueInIteration)) *
-            (1 + 1.2762 / Math.log(maxValueInIteration))) + 1;
+        return (int) (
+            (maxValueInIteration / Math.log(maxValueInIteration)) *
+            (1 + 1.2762 / Math.log(maxValueInIteration))
+        ) + 1;
     }
 
     public static void main(String[] args) {
@@ -292,7 +321,7 @@ public class PrimesLongFast {
         );
 
         System.out.println(
-            "\nTime: " + ((float)(System.currentTimeMillis() - time) / 1000) +
+            "\nTime: " + ((float) (System.currentTimeMillis() - time) / 1000) +
             " s"
         );
     }
